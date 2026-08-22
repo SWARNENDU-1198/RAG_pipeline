@@ -404,6 +404,11 @@
       box-shadow: 0 0 30px var(--hh-orange-glow);
     }
 
+    .mic-main-btn:active {
+      transform: scale(0.96) !important;
+      box-shadow: 0 0 10px var(--hh-orange-glow);
+    }
+
     .mic-main-btn.recording {
       border-color: var(--hh-red);
       background: linear-gradient(135deg, #450a17 0%, #200308 100%);
@@ -1126,6 +1131,14 @@
           return;
         }
 
+        const iconEl = document.getElementById('micBtnIcon');
+        const textEl = document.getElementById('micBtnText');
+        const vizEl = document.getElementById('audioVisualizer');
+        if (iconEl) iconEl.textContent = '⏳';
+        if (textEl) textEl.textContent = 'CONNECTING...';
+        micStatus.textContent = '⏳ Connecting microphone... Please speak when red.';
+        micStatus.style.color = 'var(--hh-orange)';
+
         try {
           micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           mediaRecorder = new MediaRecorder(micStream);
@@ -1188,9 +1201,6 @@
           isRecording = true;
           recordingSeconds = 0;
           micBtn.classList.add('recording');
-          const iconEl = document.getElementById('micBtnIcon');
-          const textEl = document.getElementById('micBtnText');
-          const vizEl = document.getElementById('audioVisualizer');
           if (iconEl) iconEl.textContent = '⏹️';
           if (textEl) textEl.textContent = 'STOP & SUBMIT';
           if (vizEl) vizEl.classList.add('active');
