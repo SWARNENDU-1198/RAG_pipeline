@@ -95,35 +95,70 @@ class VoiceRAGPipelineOrchestrator:
 
         # STAGE 1: Speech-to-Text (STT via Sarvam AI)
         stt_start = time.perf_counter()
-        if input_data.text_override:
-            transcript = input_data.text_override
-            stt_res = {
-                "transcript": transcript,
-                "confidence": 1.0,
-                "provider": "text_override",
-                "duration_ms": 0.0,
-                "status": "SUCCESS"
-            }
-        else:
-            audio_bytes = input_data.audio_bytes or b"dummy_audio"
+        transcript = ""
+        stt_provider = "text_override"
+        stt_conf = 1.0
+
+        if input_data.audio_bytes and len(input_data.audio_bytes) > 50:
             raw_stt = self.stt_client.transcribe_audio(
-                audio_bytes=audio_bytes,
+                audio_bytes=input_data.audio_bytes,
                 language_code=input_data.language_code,
                 filename=input_data.filename
             )
-            transcript = raw_stt["transcript"]
-            stt_dur = (time.perf_counter() - stt_start) * 1000
-            stt_res = {
-                "transcript": transcript,
-                "confidence": raw_stt.get("confidence", 0.9),
-                "provider": raw_stt.get("provider", "sarvam_ai"),
-                "duration_ms": round(stt_dur, 2),
-                "status": "SUCCESS"
-            }
-        
-        stt_pydantic = STTResult(**stt_res)
+            transcript = raw_stt.get("transcript", "").strip()
+            stt_provider = raw_stt.get("provider", "sarvam_ai")
+            stt_conf = float(raw_stt.get("confidence", 0.9))
+
+        # If audio transcription was empty or not provided, check text_override
+        if not transcript and input_data.text_override and input_data.text_override.strip():
+            transcript = input_data.text_override.strip()
+            stt_provider = "text_override"
+            stt_conf = 1.0
+
+        stt_dur = (time.perf_counter() - stt_start) * 1000
+        stt_pydantic = STTResult(
+            transcript=transcript,
+            confidence=stt_conf,
+            provider=stt_provider,
+            duration_ms=round(stt_dur, 2),
+            status="SUCCESS" if transcript else "EMPTY"
+        )
         stage_timings["stt"] = stt_pydantic.duration_ms
         logger.info(f"[Stage 1: STT] Provider: {stt_pydantic.provider} | Transcript: '{transcript}' ({stt_pydantic.duration_ms} ms)")
+
+        # If no transcript could be obtained from audio or text
+        if not transcript:
+            no_speech_reason = "No speech was detected or audio could not be transcribed. Please speak clearly or check SARVAM_API_KEY."
+            stage_timings["input_guardrail"] = 0.0
+            stage_timings["retrieval"] = 0.0
+            stage_timings["generation"] = 0.0
+            stage_timings["grounding_check"] = 0.0
+            stage_timings["output_guardrail"] = 0.0
+            total_dur = (time.perf_counter() - pipeline_start) * 1000
+
+            return FinalPipelineOutput(
+                query_text="",
+                final_answer="No speech was detected in the audio recording. Please speak clearly into the microphone.",
+                is_refused=True,
+                refusal_reason=no_speech_reason,
+                retrieved_chunks=[],
+                stt_result=stt_pydantic,
+                input_guardrail=InputGuardrailResult(
+                    safety_passed=False,
+                    confidence_passed=False,
+                    top_score=0.0,
+                    reasoning=no_speech_reason,
+                    duration_ms=0.0,
+                    status="REFUSED"
+                ),
+                retrieval_result=RetrievalResult(chunks=[], top_score=0.0, duration_ms=0.0, status="SKIPPED"),
+                generation_result=GenerationResult(raw_answer="", duration_ms=0.0, status="SKIPPED"),
+                grounding_result=GroundingResult(is_grounded=False, grounding_score=0.0, reasoning=no_speech_reason, duration_ms=0.0, status="SKIPPED"),
+                knowledge_mode=knowledge_mode,
+                source_type="none",
+                total_latency_ms=round(total_dur, 2),
+                stage_timings=stage_timings
+            )
 
         # STAGE 2: Pre-Retrieval Input Safety Guardrail
         ig_start = time.perf_counter()

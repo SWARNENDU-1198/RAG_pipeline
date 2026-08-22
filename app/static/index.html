@@ -1056,10 +1056,11 @@
       if (fileInput) fileInput.value = '';
     });
 
-    // Direct High-Fidelity Audio Recording (Sarvam AI STT Engine)
+    // Direct High-Fidelity Audio Recording (Sarvam AI STT Engine with Live Speech Recognition fallback)
     let micStream = null;
     let recordingTimer = null;
     let recordingSeconds = 0;
+    let speechRecognizer = null;
 
     micBtn.addEventListener('click', async () => {
       if (!isRecording) {
@@ -1074,6 +1075,26 @@
           micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           mediaRecorder = new MediaRecorder(micStream);
 
+          // Client-side real-time speech recognition assist
+          const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+          if (SpeechRec) {
+            speechRecognizer = new SpeechRec();
+            speechRecognizer.continuous = true;
+            speechRecognizer.interimResults = true;
+            const selectedLang = languageSelect.value;
+            speechRecognizer.lang = (selectedLang && selectedLang !== 'unknown') ? selectedLang : 'hi-IN';
+            speechRecognizer.onresult = (event) => {
+              let liveTranscript = '';
+              for (let i = 0; i < event.results.length; ++i) {
+                liveTranscript += event.results[i][0].transcript;
+              }
+              if (liveTranscript.trim()) {
+                textQueryInput.value = liveTranscript.trim();
+              }
+            };
+            try { speechRecognizer.start(); } catch (e) {}
+          }
+
           mediaRecorder.ondataavailable = event => {
             if (event.data && event.data.size > 0) {
               audioChunks.push(event.data);
@@ -1084,6 +1105,10 @@
             if (recordingTimer) {
               clearInterval(recordingTimer);
               recordingTimer = null;
+            }
+            if (speechRecognizer) {
+              try { speechRecognizer.stop(); } catch (e) {}
+              speechRecognizer = null;
             }
             if (audioChunks.length > 0) {
               recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
@@ -1129,12 +1154,16 @@
           clearInterval(recordingTimer);
           recordingTimer = null;
         }
+        if (speechRecognizer) {
+          try { speechRecognizer.stop(); } catch (e) {}
+          speechRecognizer = null;
+        }
         micStatus.textContent = '⚡ Transcribing via Sarvam AI & querying hybrid RAG pipeline...';
         micStatus.style.color = 'var(--hh-orange)';
 
         if (mediaRecorder && mediaRecorder.state === 'recording') {
           mediaRecorder.stop();
-        } else if (textQueryInput.value.trim()) {
+        } else {
           submitPipelineQuery();
         }
       }
@@ -1162,9 +1191,13 @@
         formData.append('audio', recordedBlob, 'recorded_speech.webm');
       } else if (fileInput.files.length > 0) {
         formData.append('audio', fileInput.files[0]);
-      } else if (textQuery) {
+      }
+
+      if (textQuery) {
         formData.append('query_text', textQuery);
-      } else {
+      }
+
+      if (!recordedBlob && fileInput.files.length === 0 && !textQuery) {
         alert('Please speak into the mic, upload an audio file, or enter a question.');
         return;
       }

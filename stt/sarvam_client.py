@@ -6,16 +6,15 @@ Sarvam AI Client Wrapper for:
   Supports all Indic languages and automatic language detection (language_code="unknown").
 - Text-to-Speech (TTS): https://api.sarvam.ai/text-to-speech
 - Translation: https://api.sarvam.ai/translate
-- Local Whisper (faster-whisper) fallback for offline ASR.
 """
 
 import os
 import time
 import logging
-import tempfile
 import httpx
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -24,26 +23,9 @@ SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text"
 SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech"
 SARVAM_TRANSLATE_URL = "https://api.sarvam.ai/translate"
 
-# Lazy-loaded local Whisper model instance
-_LOCAL_WHISPER_MODEL = None
-
-
-def get_local_whisper_model():
-    global _LOCAL_WHISPER_MODEL
-    if _LOCAL_WHISPER_MODEL is None:
-        try:
-            logger.info("Initializing local faster-whisper model ('tiny') for real speech transcription fallback...")
-            from faster_whisper import WhisperModel
-            _LOCAL_WHISPER_MODEL = WhisperModel("tiny", device="cpu", compute_type="int8")
-            logger.info("Local faster-whisper model loaded successfully.")
-        except Exception as e:
-            logger.warning(f"Could not load faster-whisper model: {e}")
-            _LOCAL_WHISPER_MODEL = "failed"
-    return _LOCAL_WHISPER_MODEL
-
 
 class SarvamSTTClient:
-    """Client for Sarvam AI Speech-to-Text & Text-to-Speech REST APIs with local fallback."""
+    """Client for Sarvam AI Speech-to-Text & Text-to-Speech REST APIs."""
 
     def __init__(self, api_key: str = None, max_retries: int = 2, backoff_factor: float = 1.5):
         self.api_key = api_key or os.getenv("SARVAM_API_KEY", "")
@@ -65,18 +47,36 @@ class SarvamSTTClient:
         Transcribes audio bytes to text using Sarvam AI STT API.
         Supports all Indian language codes and 'unknown' for automatic language detection.
         """
+        if not audio_bytes or len(audio_bytes) < 100:
+            logger.warning("Empty or truncated audio bytes provided to STT.")
+            return {
+                "transcript": "",
+                "language_code": "unknown",
+                "confidence": 0.0,
+                "provider": "none",
+                "error": "Empty audio data"
+            }
+
         if not self.api_key:
-            logger.info("SARVAM_API_KEY not set. Using local faster-whisper engine for STT...")
-            return self._transcribe_local_whisper(audio_bytes, filename)
+            logger.warning("SARVAM_API_KEY is not set. Cannot transcribe audio via Sarvam AI.")
+            return {
+                "transcript": "",
+                "language_code": "unknown",
+                "confidence": 0.0,
+                "provider": "missing_api_key",
+                "error": "SARVAM_API_KEY not configured"
+            }
 
         headers = {
             "api-subscription-key": self.api_key
         }
 
-        # Handle WebM and other audio content types cleanly
+        # Normalize filename & content type
         content_type = "audio/wav"
         if filename.endswith(".webm") or (len(audio_bytes) > 4 and audio_bytes[:4] == b"\x1a\x45\xdf\xa3"):
             content_type = "audio/webm"
+            if not filename.endswith(".webm"):
+                filename = "audio.webm"
         elif filename.endswith(".mp3"):
             content_type = "audio/mp3"
 
@@ -84,9 +84,7 @@ class SarvamSTTClient:
             "file": (filename, audio_bytes, content_type)
         }
         
-        # Primary and secondary models
         candidate_models = [model, "saaras:v3", "saarika:v2.5"]
-        # Remove duplicates while preserving order
         candidate_models = list(dict.fromkeys(candidate_models))
 
         for m in candidate_models:
@@ -116,7 +114,6 @@ class SarvamSTTClient:
                         }
                     else:
                         logger.warning(f"Sarvam STT ({m}) returned {response.status_code}: {response.text}")
-                        # If model error or bad request, try next model candidate immediately
                         if response.status_code == 400 and "model" in response.text.lower():
                             break
                 except Exception as e:
@@ -125,8 +122,13 @@ class SarvamSTTClient:
                 if attempt < self.max_retries:
                     time.sleep(self.backoff_factor ** attempt)
 
-        logger.warning("All Sarvam STT retries exhausted. Falling back to local faster-whisper transcription.")
-        return self._transcribe_local_whisper(audio_bytes, filename)
+        return {
+            "transcript": "",
+            "language_code": "unknown",
+            "confidence": 0.0,
+            "provider": "sarvam_ai_failed",
+            "error": "Sarvam STT could not transcribe audio"
+        }
 
     def synthesize_speech(
         self,
@@ -146,7 +148,6 @@ class SarvamSTTClient:
             "Content-Type": "application/json"
         }
 
-        # Normalize target_language_code for Sarvam TTS
         valid_tts_langs = {
             "hi": "hi-IN", "hi-in": "hi-IN",
             "bn": "bn-IN", "bn-in": "bn-IN",
@@ -163,7 +164,7 @@ class SarvamSTTClient:
         tts_lang = valid_tts_langs.get(target_language_code.lower(), "hi-IN")
 
         payload = {
-            "inputs": [text[:500]],  # Sarvam TTS limit
+            "inputs": [text[:500]],
             "target_language_code": tts_lang,
             "speaker": speaker,
             "model": "bulbul:v2"
@@ -194,7 +195,6 @@ class SarvamSTTClient:
             return None
 
         headers = {
-            "api-subscription-code": self.api_key,
             "api-subscription-key": self.api_key,
             "Content-Type": "application/json"
         }
@@ -215,48 +215,3 @@ class SarvamSTTClient:
         except Exception as e:
             logger.warning(f"Sarvam translate exception: {e}")
         return None
-
-    def _transcribe_local_whisper(self, audio_bytes: bytes, filename: str) -> Dict[str, Any]:
-        """Transcribes real audio bytes using local faster-whisper model."""
-        if not audio_bytes or len(audio_bytes) < 100:
-            return {
-                "transcript": "What is Calangute Beach famous for?",
-                "confidence": 0.90,
-                "provider": "sample_fallback"
-            }
-
-        whisper_model = get_local_whisper_model()
-        if whisper_model and whisper_model != "failed":
-            try:
-                suffix = ".webm" if "webm" in filename.lower() or (len(audio_bytes) > 4 and audio_bytes[:4] == b"\x1a\x45\xdf\xa3") else ".wav"
-                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp_file:
-                    tmp_file.write(audio_bytes)
-                    tmp_path = tmp_file.name
-
-                try:
-                    segments, info = whisper_model.transcribe(tmp_path, beam_size=1)
-                    text_parts = [segment.text.strip() for segment in segments]
-                    transcript = " ".join(text_parts).strip()
-                    logger.info(f"Local faster-whisper transcript: '{transcript}' (Language: {info.language})")
-
-                    if transcript:
-                        return {
-                            "transcript": transcript,
-                            "language_code": info.language,
-                            "confidence": round(float(info.language_probability), 2),
-                            "provider": "faster_whisper_local"
-                        }
-                finally:
-                    if os.path.exists(tmp_path):
-                        try:
-                            os.remove(tmp_path)
-                        except Exception:
-                            pass
-            except Exception as e:
-                logger.warning(f"Local faster-whisper transcription error: {e}")
-
-        return {
-            "transcript": "Bharat ka capital kya hai",
-            "confidence": 0.85,
-            "provider": "default_fallback"
-        }
