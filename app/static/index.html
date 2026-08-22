@@ -1056,24 +1056,111 @@
       if (fileInput) fileInput.value = '';
     });
 
-    // Direct High-Fidelity Audio Recording (Sarvam AI STT Engine with Live Speech Recognition fallback)
-    let micStream = null;
+    // Web Audio 16kHz Mono WAV Recorder (Standard for Sarvam AI STT)
+    let audioCtx = null;
+    let micSource = null;
+    let scriptProcessor = null;
+    let pcmBuffers = [];
+    let pcmLength = 0;
     let recordingTimer = null;
     let recordingSeconds = 0;
     let speechRecognizer = null;
+
+    function export16kHzWAV(buffers, totalLength, inputSampleRate) {
+      // Merge Float32 arrays
+      const merged = new Float32Array(totalLength);
+      let offset = 0;
+      for (let i = 0; i < buffers.length; i++) {
+        merged.set(buffers[i], offset);
+        offset += buffers[i].length;
+      }
+
+      // Downsample to 16000 Hz if needed
+      const targetRate = 16000;
+      let resampled;
+      if (inputSampleRate === targetRate) {
+        resampled = merged;
+      } else {
+        const ratio = inputSampleRate / targetRate;
+        const newLength = Math.round(totalLength / ratio);
+        resampled = new Float32Array(newLength);
+        for (let i = 0; i < newLength; i++) {
+          const origIndex = i * ratio;
+          const leftIndex = Math.floor(origIndex);
+          const rightIndex = Math.min(leftIndex + 1, totalLength - 1);
+          const frac = origIndex - leftIndex;
+          resampled[i] = merged[leftIndex] * (1 - frac) + merged[rightIndex] * frac;
+        }
+      }
+
+      // Encode RIFF WAV 16-bit PCM Mono
+      const buffer = new ArrayBuffer(44 + resampled.length * 2);
+      const view = new DataView(buffer);
+
+      function writeString(view, offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + resampled.length * 2, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true); // Subchunk1Size
+      view.setUint16(20, 1, true); // PCM format
+      view.setUint16(22, 1, true); // Mono (1 channel)
+      view.setUint32(24, targetRate, true); // Sample rate
+      view.setUint32(28, targetRate * 2, true); // Byte rate (SampleRate * 1 * 16/8)
+      view.setUint16(32, 2, true); // Block align (1 * 16/8)
+      view.setUint16(34, 16, true); // Bits per sample
+      writeString(view, 36, 'data');
+      view.setUint32(40, resampled.length * 2, true);
+
+      let pcmOffset = 44;
+      for (let i = 0; i < resampled.length; i++, pcmOffset += 2) {
+        let s = Math.max(-1, Math.min(1, resampled[i]));
+        view.setInt16(pcmOffset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+
+      return new Blob([view], { type: 'audio/wav' });
+    }
 
     micBtn.addEventListener('click', async () => {
       if (!isRecording) {
         // Start recording
         textQueryInput.value = '';
         recordedBlob = null;
-        audioChunks = [];
+        pcmBuffers = [];
+        pcmLength = 0;
         const fileInput = document.getElementById('audioFileInput');
         if (fileInput) fileInput.value = '';
 
         try {
-          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          mediaRecorder = new MediaRecorder(micStream);
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              channelCount: 1,
+              sampleRate: 16000,
+              echoCancellation: true,
+              noiseSuppression: true
+            }
+          });
+
+          micSource = audioCtx.createMediaStreamSource(micStream);
+          // Buffer size 4096, 1 input channel, 1 output channel
+          scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+          scriptProcessor.onaudioprocess = (e) => {
+            if (!isRecording) return;
+            const inputData = e.inputBuffer.getChannelData(0);
+            pcmBuffers.push(new Float32Array(inputData));
+            pcmLength += inputData.length;
+          };
+
+          micSource.connect(scriptProcessor);
+          scriptProcessor.connect(audioCtx.destination);
 
           // Client-side real-time speech recognition assist
           const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1095,38 +1182,10 @@
             try { speechRecognizer.start(); } catch (e) {}
           }
 
-          mediaRecorder.ondataavailable = event => {
-            if (event.data && event.data.size > 0) {
-              audioChunks.push(event.data);
-            }
-          };
-
-          mediaRecorder.onstop = () => {
-            if (recordingTimer) {
-              clearInterval(recordingTimer);
-              recordingTimer = null;
-            }
-            if (speechRecognizer) {
-              try { speechRecognizer.stop(); } catch (e) {}
-              speechRecognizer = null;
-            }
-            if (audioChunks.length > 0) {
-              recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
-              audioPreview.src = URL.createObjectURL(recordedBlob);
-              audioPreview.style.display = 'block';
-            }
-            if (micStream) {
-              micStream.getTracks().forEach(track => track.stop());
-              micStream = null;
-            }
-            submitPipelineQuery();
-          };
-
-          mediaRecorder.start(100);
           isRecording = true;
           recordingSeconds = 0;
           micBtn.classList.add('recording');
-          micStatus.textContent = '🔴 [00:00] RECORDING... Speak in any Indic language or Hinglish. Tap mic again to submit.';
+          micStatus.textContent = '🔴 [00:00] RECORDING... Speak your question in any Indian language. Tap mic to finish.';
           micStatus.style.color = 'var(--hh-red)';
 
           recordingTimer = setInterval(() => {
@@ -1134,7 +1193,7 @@
             const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
             const secs = String(recordingSeconds % 60).padStart(2, '0');
             if (isRecording) {
-              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Speak your question, tap mic to submit!`;
+              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Tap mic button when done.`;
             }
           }, 1000);
 
@@ -1147,7 +1206,7 @@
           micStatus.style.color = 'var(--hh-red)';
         }
       } else {
-        // Stop recording and send audio to Sarvam AI STT
+        // Stop recording
         isRecording = false;
         micBtn.classList.remove('recording');
         if (recordingTimer) {
@@ -1158,14 +1217,32 @@
           try { speechRecognizer.stop(); } catch (e) {}
           speechRecognizer = null;
         }
-        micStatus.textContent = '⚡ Transcribing via Sarvam AI & querying hybrid RAG pipeline...';
+        micStatus.textContent = '⚡ Transcribing audio via Sarvam AI & querying hybrid RAG pipeline...';
         micStatus.style.color = 'var(--hh-orange)';
 
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-          mediaRecorder.stop();
-        } else {
-          submitPipelineQuery();
+        try {
+          if (scriptProcessor && micSource) {
+            micSource.disconnect();
+            scriptProcessor.disconnect();
+          }
+          if (micStream) {
+            micStream.getTracks().forEach(track => track.stop());
+            micStream = null;
+          }
+          if (pcmBuffers.length > 0 && audioCtx) {
+            recordedBlob = export16kHzWAV(pcmBuffers, pcmLength, audioCtx.sampleRate);
+            audioPreview.src = URL.createObjectURL(recordedBlob);
+            audioPreview.style.display = 'block';
+          }
+          if (audioCtx) {
+            audioCtx.close();
+            audioCtx = null;
+          }
+        } catch (err) {
+          console.warn("Audio cleanup error:", err);
         }
+
+        submitPipelineQuery();
       }
     });
 
@@ -1188,7 +1265,7 @@
       formData.append('knowledge_mode', mode);
       
       if (recordedBlob) {
-        formData.append('audio', recordedBlob, 'recorded_speech.webm');
+        formData.append('audio', recordedBlob, 'recorded_speech.wav');
       } else if (fileInput.files.length > 0) {
         formData.append('audio', fileInput.files[0]);
       }
