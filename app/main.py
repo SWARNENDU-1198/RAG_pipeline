@@ -12,6 +12,7 @@ FastAPI backend application serving:
 import os
 import sys
 import logging
+from typing import Optional
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, status
@@ -29,16 +30,24 @@ from pipeline.schemas import AudioInput
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
-orchestrator: VoiceRAGPipelineOrchestrator = None
+_orchestrator_instance: Optional[VoiceRAGPipelineOrchestrator] = None
+
+
+def get_orchestrator() -> VoiceRAGPipelineOrchestrator:
+    """Lazy-loads and caches the pipeline orchestrator singleton instance."""
+    global _orchestrator_instance
+    if _orchestrator_instance is None:
+        logger.info("Initializing Voice RAG Pipeline Orchestrator on demand...")
+        _orchestrator_instance = VoiceRAGPipelineOrchestrator()
+        _orchestrator_instance.initialize_index()
+        logger.info("Voice RAG Pipeline Orchestrator initialized successfully.")
+    return _orchestrator_instance
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global orchestrator
-    logger.info("Initializing Voice RAG Pipeline Orchestrator on server startup...")
-    orchestrator = VoiceRAGPipelineOrchestrator()
-    orchestrator.initialize_index()
-    logger.info("Server startup complete. Voice RAG Pipeline ready for requests.")
+    logger.info("Server startup: Warming up Voice RAG Pipeline Orchestrator...")
+    get_orchestrator()
     yield
     logger.info("Shutting down Voice RAG Pipeline server...")
 
@@ -74,10 +83,11 @@ async def get_index():
 
 @app.get("/health")
 async def health_check():
+    orch = get_orchestrator()
     return {
         "status": "healthy",
         "service": "Voice-Enabled RAG Pipeline",
-        "index_initialized": orchestrator.is_indexed if orchestrator else False,
+        "index_initialized": orch.is_indexed if orch else False,
         "hybrid_retriever": "FAISS (Dense) + BM25 (Sparse)"
     }
 
@@ -89,13 +99,11 @@ class TTSRequest(BaseModel):
 
 @app.post("/tts")
 async def synthesize_tts(req: TTSRequest):
-    if orchestrator is None:
-        raise HTTPException(status_code=500, detail="Pipeline orchestrator not initialized.")
-
+    orch = get_orchestrator()
     if not req.text or not req.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
 
-    audio_base64 = orchestrator.stt_client.synthesize_speech(
+    audio_base64 = orch.stt_client.synthesize_speech(
         text=req.text,
         target_language_code=req.language_code
     )
@@ -117,9 +125,7 @@ async def process_query(
     language_code: str = Form("unknown"),
     knowledge_mode: str = Form("dataset_only")
 ):
-    if orchestrator is None:
-        raise HTTPException(status_code=500, detail="Pipeline orchestrator not initialized.")
-
+    orch = get_orchestrator()
     if not audio and not query_text:
         raise HTTPException(status_code=400, detail="Please provide either an audio file or query_text parameter.")
 
@@ -130,7 +136,6 @@ async def process_query(
         filename = audio.filename or "input_audio.wav"
         audio_bytes = await audio.read()
 
-    # Normalize empty or None query_text
     if query_text and not query_text.strip():
         query_text = None
 
@@ -143,7 +148,7 @@ async def process_query(
     )
 
     try:
-        pipeline_output = orchestrator.run(input_data)
+        pipeline_output = orch.run(input_data)
         return pipeline_output.model_dump()
     except Exception as e:
         logger.error(f"Error processing pipeline query: {e}", exc_info=True)
