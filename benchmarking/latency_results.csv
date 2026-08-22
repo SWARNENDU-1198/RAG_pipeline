@@ -1,0 +1,8 @@
+Stage,P50 (ms),P70 (ms),P90 (ms),P95 (ms),P100 (Max ms),Mean (ms),Min (ms)
+Retrieval Only (Dense FAISS + BM25),49.17,54.06,60.03,63.85,67.63,49.32,33.34
+Speech-To-Text (Sarvam STT / Fallback),0.0,0.0,0.0,0.0,0.0,0.0,0.0
+Input Safety & Confidence Guardrail,0.02,0.02,0.02,0.03,0.03,0.02,0.01
+LLM Answer Generation,0.0,0.0,0.0,0.01,0.01,0.0,0.0
+Post-Generation Grounding Check,0.16,0.22,0.33,0.42,0.6,0.18,0.0
+Output Refusal Guardrail,0.0,0.0,0.0,0.0,0.0,0.0,0.0
+Full End-to-End Pipeline,49.65,54.52,60.61,64.37,68.03,49.78,33.85

@@ -1,0 +1,34 @@
+[
+  {
+    "strategy": "Fixed-Size (Baseline)",
+    "total_chunks": 8058,
+    "recall@1": 0.204,
+    "recall@3": 0.2754,
+    "recall@5": 0.2995,
+    "recall@10": 0.3346
+  },
+  {
+    "strategy": "Semantic (Embedding Distance)",
+    "total_chunks": 12005,
+    "recall@1": 0.2078,
+    "recall@3": 0.2696,
+    "recall@5": 0.3031,
+    "recall@10": 0.3323
+  },
+  {
+    "strategy": "Metadata-Aware (MS MARCO Preserving)",
+    "total_chunks": 8834,
+    "recall@1": 0.2055,
+    "recall@3": 0.2754,
+    "recall@5": 0.3026,
+    "recall@10": 0.3354
+  },
+  {
+    "strategy": "Hierarchical (Parent-Child)",
+    "total_chunks": 9023,
+    "recall@1": 0.2055,
+    "recall@3": 0.2693,
+    "recall@5": 0.3011,
+    "recall@10": 0.3303
+  }
+]

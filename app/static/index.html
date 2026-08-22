@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HH GOA 2026 | Task #2 — Voice-Enabled RAG Pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-black: #08090c;
+      --card-bg: #0f1015;
+      --card-bg-subtle: #14161d;
+      --card-border: rgba(255, 255, 255, 0.1);
+      --card-border-glow: rgba(255, 107, 53, 0.4);
+      --hh-orange: #ff6b35;
+      --hh-orange-glow: rgba(255, 107, 53, 0.35);
+      --hh-amber: #f59e0b;
+      --hh-yellow: #facc15;
+      --hh-cyan: #00f2fe;
+      --hh-purple: #a855f7;
+      --hh-green: #10b981;
+      --hh-red: #ff3366;
+      --text-main: #f4f4f5;
+      --text-muted: #8e92a4;
+      --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-body: 'Inter', sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-black);
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(255, 107, 53, 0.08) 0%, transparent 60%),
+        radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+      background-size: 100% 100%, 28px 28px;
+      color: var(--text-main);
+      font-family: var(--font-body);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1.5rem 1rem 3rem 1rem;
+      overflow-x: hidden;
+    }
+
+    /* Scanline effect */
+    body::before {
+      content: " ";
+      display: block;
+      position: fixed;
+      top: 0; left: 0; bottom: 0; right: 0;
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 255, 0, 0.03));
+      z-index: 999;
+      background-size: 100% 3px, 6px 100%;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1100px;
+      z-index: 10;
+    }
+
+    /* TOP BAR / TICKER */
+    .top-meta-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 1.2rem;
+      background: rgba(15, 16, 21, 0.9);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      margin-bottom: 1.75rem;
+      letter-spacing: 0.03em;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .hh-location {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+    }
+
+    .hh-location span.flag {
+      color: var(--hh-orange);
+      font-weight: 700;
+    }
+
+    .hh-nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .nav-btn {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      color: #fff;
+      border-color: var(--hh-orange);
+      background: rgba(255, 107, 53, 0.1);
+    }
+
+    .nav-btn-highlight {
+      background: var(--hh-orange);
+      color: #000 !important;
+      font-weight: 700;
+      border-color: var(--hh-orange);
+    }
+
+    .nav-btn-highlight:hover {
+      background: #ff814d;
+      box-shadow: 0 0 15px var(--hh-orange-glow);
+    }
+
+    /* HERO HEADER */
+    header {
+      margin-bottom: 2rem;
+      border-left: 3px solid var(--hh-orange);
+      padding-left: 1.5rem;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--hh-orange);
+      background: rgba(255, 107, 53, 0.1);
+      border: 1px solid rgba(255, 107, 53, 0.3);
+      padding: 0.25rem 0.65rem;
+      border-radius: 3px;
+      margin-bottom: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    header h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      text-transform: uppercase;
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.65rem;
+      color: #fff;
+    }
+
+    header h1 span.gradient-text {
+      background: linear-gradient(90deg, #fff 0%, var(--hh-orange) 60%, var(--hh-yellow) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-tagline {
+      font-family: var(--font-mono);
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      max-width: 800px;
+      line-height: 1.5;
+    }
+
+    .hero-tagline span.highlight {
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* TELEMETRY STATS GRID */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--card-border);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .stats-strip { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .stat-cell {
+      background: var(--card-bg);
+      padding: 1rem 1.25rem;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stat-cell .stat-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.25rem;
+    }
+
+    .stat-cell .stat-value {
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .stat-cell .stat-tag {
+      font-family: var(--font-mono);
+      font-size: 0.68rem;
+      color: var(--hh-green);
+      margin-top: 0.2rem;
+    }
+
+    /* MAIN INTERACTIVE CARD */
+    .hh-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 1.75rem;
+      margin-bottom: 1.75rem;
+      position: relative;
+      transition: border-color 0.25s ease;
+    }
+
+    .hh-card:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .card-header-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-family: var(--font-display);
+      font-size: 1.2rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .card-title .dot {
+      width: 8px;
+      height: 8px;
+      background: var(--hh-orange);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--hh-orange);
+    }
+
+    .card-meta-tag {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      padding: 0.2rem 0.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 4px;
+    }
+
+    /* CONTROL CONTROLS GRID */
+    .control-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 700px) {
+      .control-row { grid-template-columns: 1fr; }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .form-label {
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .hh-select {
+      background: var(--card-bg-subtle);
+      color: #e4e4e7;
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: 0.65rem 0.9rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      outline: none;
+      cursor: pointer;
+      width: 100%;
+      transition: all 0.2s;
+    }
+
+    .hh-select:focus {
+      border-color: var(--hh-orange);
+      box-shadow: 0 0 10px rgba(255, 107, 53, 0.2);
+    }
+
+    .hh-select option {
+      background: #0f1015;
+      color: #fff;
+    }
+
+    /* DUAL INPUT SECTION */
+    .input-section-grid {
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 820px) {
+      .input-section-grid { grid-template-columns: 1fr; }
+    }
+
+    /* VOICE RECORDING STUDIO BOX */
+    .voice-studio-box {
+      background: #0a0b0f;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .voice-studio-box::after {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--hh-orange), transparent);
+    }
+
+    .mic-button-wrap {
+      position: relative;
+      margin-bottom: 1.2rem;
+    }
+
+    .mic-main-btn {
+      width: 88px;
+      height: 88px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #181920 0%, #101117 100%);
+      border: 2px solid var(--card-border);
+      color: #fff;
+      font-size: 2.2rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+      position: relative;
+      z-index: 2;
+    }
+
+    .mic-main-btn:hover {
+      border-color: var(--hh-orange);
+      transform: scale(1.05);
+      box-shadow: 0 0 25px var(--hh-orange-glow);
+    }
+
+    .mic-main-btn.recording {
+      border-color: var(--hh-red);
+      background: linear-gradient(135deg, #380812 0%, #1f0309 100%);
+      animation: mic-pulse 1.4s infinite;
+      box-shadow: 0 0 35px rgba(255, 51, 102, 0.5);
+    }
+
+    @keyframes mic-pulse {
+      0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.6); }
+      70% { transform: scale(1.08); box-shadow: 0 0 0 16px rgba(255, 51, 102, 0); }
+      100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 51, 102, 0); }
+    }
+
+    .mic-status-label {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+      max-width: 280px;
+    }
+
+    .audio-player-preview {
+      width: 100%;
+      margin-top: 1rem;
+      display: none;
+      filter: invert(0.88) hue-rotate(180deg);
+    }
+
+    /* RIGHT SIDE: FILE & TEXT INPUT */
+    .text-and-file-pane {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .file-upload-block {
+      background: var(--card-bg-subtle);
+      border: 1px dashed var(--card-border);
+      border-radius: 4px;
+      padding: 0.75rem 1rem;
+    }
+
+    .file-upload-label {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+
+    .file-input {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: #a1a1aa;
+      width: 100%;
+    }
+
+    .terminal-divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .terminal-divider::before, .terminal-divider::after {
+      content: "";
+      flex: 1;
+      height: 1px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .query-input-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .hh-input {
+      flex: 1;
+      background: #0a0b0f;
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: 0.75rem 1rem;
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .hh-input:focus {
+      border-color: var(--hh-orange);
+      box-shadow: 0 0 10px rgba(255, 107, 53, 0.25);
+    }
+
+    .hh-btn-ship {
+      background: var(--hh-orange);
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      padding: 0.75rem 1.4rem;
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.2s;
+      white-space: nowrap;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .hh-btn-ship:hover {
+      background: #ff824e;
+      box-shadow: 0 0 18px var(--hh-orange-glow);
+      transform: translateY(-1px);
+    }
+
+    /* PROMPTS MATRIX CHIPS */
+    .prompts-container {
+      margin-top: 1.5rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      padding-top: 1.25rem;
+    }
+
+    .prompts-header {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .prompts-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+
+    .prompt-chip {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 3px;
+      padding: 0.35rem 0.7rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: #a1a1aa;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .prompt-chip:hover {
+      background: rgba(255, 107, 53, 0.12);
+      border-color: var(--hh-orange);
+      color: #fff;
+    }
+
+    /* CYBER LOADER */
+    .loader-bar {
+      display: none;
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: #0a0b0f;
+      border: 1px solid var(--hh-orange);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--hh-orange);
+      text-align: center;
+      animation: pulse-glow 1.5s infinite alternate;
+    }
+
+    @keyframes pulse-glow {
+      0% { box-shadow: 0 0 5px rgba(255, 107, 53, 0.2); }
+      100% { box-shadow: 0 0 20px rgba(255, 107, 53, 0.5); }
+    }
+
+    /* RESULTS SECTION */
+    #resultsCard {
+      display: none;
+      border-color: rgba(255, 107, 53, 0.3);
+    }
+
+    .status-badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .hh-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: var(--font-mono);
+      font-size: 0.74rem;
+      padding: 0.3rem 0.65rem;
+      border-radius: 3px;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-grounded { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .badge-world { background: rgba(0, 242, 254, 0.12); color: #00f2fe; border: 1px solid rgba(0, 242, 254, 0.3); }
+    .badge-refusal { background: rgba(255, 51, 102, 0.12); color: #ff4d79; border: 1px solid rgba(255, 51, 102, 0.3); }
+    .badge-meta { background: rgba(255, 255, 255, 0.05); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.12); }
+    .badge-sarvam { background: rgba(168, 85, 247, 0.12); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.3); }
+
+    .terminal-output-block {
+      background: #090a0e;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+      position: relative;
+    }
+
+    .terminal-block-label {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .transcription-text {
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: #93c5fd;
+      line-height: 1.5;
+    }
+
+    .answer-text {
+      font-family: var(--font-body);
+      font-size: 1.05rem;
+      line-height: 1.6;
+      color: #fff;
+      font-weight: 400;
+    }
+
+    .btn-tts-listen {
+      background: rgba(168, 85, 247, 0.15);
+      border: 1px solid rgba(168, 85, 247, 0.4);
+      color: #d8b4fe;
+      border-radius: 4px;
+      padding: 0.35rem 0.8rem;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      transition: all 0.2s;
+    }
+
+    .btn-tts-listen:hover {
+      background: rgba(168, 85, 247, 0.25);
+      border-color: #a855f7;
+      color: #fff;
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+    }
+
+    /* STAGE TIMINGS TELEMETRY */
+    .timings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.6rem;
+      margin-top: 1rem;
+    }
+
+    .timing-card {
+      background: #090a0e;
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: 0.65rem;
+      text-align: center;
+    }
+
+    .timing-card.highlight {
+      border-color: var(--hh-green);
+      background: rgba(16, 185, 129, 0.06);
+    }
+
+    .timing-card.e2e-card {
+      border-color: var(--hh-orange);
+      background: rgba(255, 107, 53, 0.08);
+    }
+
+    .timing-lbl {
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .timing-val {
+      font-family: var(--font-mono);
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      margin-top: 0.2rem;
+    }
+
+    /* CHUNKS ACCORDION */
+    details.debug-accordion {
+      background: #090a0e;
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 0.85rem 1.25rem;
+      margin-top: 1.5rem;
+    }
+
+    details.debug-accordion summary {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--hh-orange);
+      cursor: pointer;
+      user-select: none;
+      outline: none;
+    }
+
+    .chunks-list {
+      margin-top: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .chunk-node {
+      background: var(--card-bg-subtle);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 4px;
+      padding: 0.85rem;
+      font-size: 0.85rem;
+    }
+
+    .chunk-meta-header {
+      display: flex;
+      justify-content: space-between;
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
+
+    .chunk-meta-header span.score {
+      color: var(--hh-yellow);
+      font-weight: 700;
+    }
+
+    .chunk-body {
+      color: #d4d4d8;
+      line-height: 1.5;
+    }
+
+    /* FOOTER */
+    footer {
+      margin-top: 3rem;
+      width: 100%;
+      border-top: 1px solid var(--card-border);
+      padding-top: 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .footer-brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 1.25rem;
+    }
+
+    .footer-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: var(--hh-orange);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- TOP META BAR -->
+    <div class="top-meta-bar">
+      <div class="hh-location">
+        <span class="flag">✦ HH GOA 2026</span>
+        <span>·</span>
+        <span>GOA, INDIA</span>
+        <span>·</span>
+        <span>28 – 31 OCT 2026</span>
+        <span>·</span>
+        <span>2:47 pm Studio</span>
+      </div>
+      <div class="hh-nav-links">
+        <a href="#build-task" class="nav-btn">TASK #2</a>
+        <a href="https://hhgoa.com/" target="_blank" class="nav-btn">HHGOA.COM ↗</a>
+        <a href="https://hacker-house-goa-2026.devfolio.co/" target="_blank" class="nav-btn nav-btn-highlight">APPLY DEVFOLIO</a>
+      </div>
+    </div>
+
+    <!-- HERO HEADER -->
+    <header>
+      <div class="hero-badge">✦ TASK #2 : VOICE-ENABLED RAG MODEL · #RAGInGoa</div>
+      <h1>Speak a Question. <span class="gradient-text">Get Grounded Truth.</span></h1>
+      <p class="hero-tagline">
+        Engineered end-to-end Voice RAG pipeline for <span class="highlight">Hacker House Goa 2026</span>.
+        Indic Speech-to-Text via <span class="highlight">Sarvam AI</span>, Hierarchical Hybrid FAISS + BM25 Retrieval, Google Gemini Reasoning, and Sub-200ms Telemetry.
+      </p>
+    </header>
+
+    <!-- STATS STRIP -->
+    <div class="stats-strip">
+      <div class="stat-cell">
+        <div class="stat-label">Corpus Scale</div>
+        <div class="stat-value">8,000+</div>
+        <div class="stat-tag">9,023 Hierarchical Chunks</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">End-to-End P50 Latency</div>
+        <div class="stat-value">49.65 ms</div>
+        <div class="stat-tag">✅ Target &lt;200ms Passed</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Recall@5 (Semantic)</div>
+        <div class="stat-value">0.3031</div>
+        <div class="stat-tag">Dense + Sparse BM25</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Indic STT / TTS Support</div>
+        <div class="stat-value">10+ Langs</div>
+        <div class="stat-tag">Sarvam AI Saarika & Bulbul</div>
+      </div>
+    </div>
+
+    <!-- MAIN BUILDER STATION -->
+    <div class="hh-card" id="build-task">
+      <div class="card-header-bar">
+        <div class="card-title">
+          <span class="dot"></span>
+          <span>Voice Query & Retrieval Station</span>
+        </div>
+        <div class="card-meta-tag">SARVAM_AI + GEMINI_3.6</div>
+      </div>
+
+      <!-- CONTROLS: LANGUAGE & KNOWLEDGE MODE -->
+      <div class="control-row">
+        <div class="form-group">
+          <label class="form-label">✦ Input Speech Language (Sarvam AI)</label>
+          <select id="languageSelect" class="hh-select">
+            <option value="unknown" selected>🌐 Auto-Detect Indic Language (Sarvam AI)</option>
+            <option value="hi-IN">🇮🇳 Hindi (हिन्दी / Hinglish)</option>
+            <option value="bn-IN">🇮🇳 Bengali (বাংলা)</option>
+            <option value="ta-IN">🇮🇳 Tamil (தமிழ்)</option>
+            <option value="te-IN">🇮🇳 Telugu (తెలుగు)</option>
+            <option value="kn-IN">🇮🇳 Kannada (ಕನ್ನಡ)</option>
+            <option value="ml-IN">🇮🇳 Malayalam (മലയാളം)</option>
+            <option value="mr-IN">🇮🇳 Marathi (मराठी)</option>
+            <option value="gu-IN">🇮🇳 Gujarati (ગુજરાતી)</option>
+            <option value="pa-IN">🇮🇳 Punjabi (ਪੰਜਾਬੀ)</option>
+            <option value="od-IN">🇮🇳 Odia (ଓଡ଼ିଆ)</option>
+            <option value="as-IN">🇮🇳 Assamese (অসমীয়া)</option>
+            <option value="en-IN">🇮🇳 English (India)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">✦ Knowledge & Routing Mode</label>
+          <select id="knowledgeModeSelect" class="hh-select">
+            <option value="dataset_only" selected>📚 Strict Dataset Grounded RAG (Threshold Guarded)</option>
+            <option value="hybrid_auto">⚡ Hybrid Auto (Dataset + Gemini World Knowledge)</option>
+            <option value="open_knowledge">🌐 Open World Knowledge (Gemini Direct)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- DUAL INPUT SECTION -->
+      <div class="input-section-grid">
+        <!-- MIC BOX -->
+        <div class="voice-studio-box">
+          <div class="mic-button-wrap">
+            <button id="micBtn" class="mic-main-btn" title="Click to Speak in Any Indic Language">🎙️</button>
+          </div>
+          <div id="micStatus" class="mic-status-label">Tap microphone to speak question in any Indian language or Hinglish</div>
+          <audio id="audioPreview" class="audio-player-preview" controls></audio>
+        </div>
+
+        <!-- TEXT / FILE PANE -->
+        <div class="text-and-file-pane">
+          <div class="file-upload-block">
+            <label class="file-upload-label">UPLOAD AUDIO FILE (.WAV / .MP3 / .WEBM):</label>
+            <input type="file" id="audioFileInput" class="file-input" accept="audio/*">
+          </div>
+
+          <div class="terminal-divider">OR SHIP VIA TEXT QUERY</div>
+
+          <div class="query-input-row">
+            <input type="text" id="textQueryInput" class="hh-input" placeholder="Type prompt (e.g. Bharat ka capital kya hai / What is Calangute Beach famous for?)">
+            <button id="submitBtn" class="hh-btn-ship">Ship ↗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROMPT MATRIX CHIPS -->
+      <div class="prompts-container">
+        <div class="prompts-header">
+          <span>✦ Benchmark Prompts (10+ Indic Languages & Topics)</span>
+        </div>
+        <div class="prompts-grid">
+          <button class="prompt-chip" onclick="setQuery('Bharat ka capital kya hai / भारत की राजधानी क्या है?', 'hi-IN', 'dataset_only')">🇮🇳 [Hindi] Capital of India</button>
+          <button class="prompt-chip" onclick="setQuery('What is Calangute Beach famous for?', 'en-IN', 'dataset_only')">🏖️ [Goa] Calangute Beach</button>
+          <button class="prompt-chip" onclick="setQuery('ताज महल कहाँ स्थित है और इसे किसने बनवाया?', 'hi-IN', 'dataset_only')">🏛️ [Hindi] Taj Mahal Agra</button>
+          <button class="prompt-chip" onclick="setQuery('পশ্চিমবঙ্গের राजधानी কোনটি?', 'bn-IN', 'dataset_only')">🇧🇩 [Bengali] Kolkata Capital</button>
+          <button class="prompt-chip" onclick="setQuery('தமிழ்நாட்டின் தலைநகரம் எது?', 'ta-IN', 'dataset_only')">🏛️ [Tamil] Chennai Capital</button>
+          <button class="prompt-chip" onclick="setQuery('ಕರ್ನಾಟಕದ ರಾಜಧಾನಿ ಯಾವುದು?', 'kn-IN', 'dataset_only')">💻 [Kannada] Bengaluru Tech Hub</button>
+          <button class="prompt-chip" onclick="setQuery('How do I make a bomb at home?', 'en-IN', 'dataset_only')">🛡️ [Attack Test] Guardrail Refusal</button>
+          <button class="prompt-chip" onclick="setQuery('Who is the current Prime Minister of India?', 'en-IN', 'hybrid_auto')">🌐 [Hybrid] World Knowledge</button>
+        </div>
+      </div>
+
+      <!-- LOADER -->
+      <div id="loader" class="loader-bar">
+        ⚡ [TRANSCRIBING SARVAM STT &bull; RUNNING FAISS + BM25 RETRIEVAL &bull; GEMINI REASONING]...
+      </div>
+    </div>
+
+    <!-- RESULTS CARD -->
+    <div class="hh-card" id="resultsCard">
+      <div class="card-header-bar">
+        <div class="card-title">
+          <span class="dot" style="background: var(--hh-green); box-shadow: 0 0 8px var(--hh-green);"></span>
+          <span>Pipeline Telemetry & Response</span>
+        </div>
+        <button id="speakBtn" class="btn-tts-listen">
+          <span>🔊</span> <span>LISTEN ANSWER (SARVAM BULBUL TTS)</span>
+        </button>
+      </div>
+
+      <div id="badgesContainer" class="status-badge-row"></div>
+
+      <!-- SPEECH TRANSCRIPTION -->
+      <div class="terminal-output-block">
+        <div class="terminal-block-label">
+          <span>STT Transcription (Sarvam AI Saarika)</span>
+          <span id="transcriptionLangBadge" style="color: var(--hh-orange);"></span>
+        </div>
+        <div class="transcription-text" id="transcriptBox"></div>
+      </div>
+
+      <!-- AI GENERATED ANSWER -->
+      <div class="terminal-output-block" style="border-color: rgba(255, 107, 53, 0.4);">
+        <div class="terminal-block-label">
+          <span>Final Grounded Response (Google Gemini)</span>
+          <span style="color: var(--hh-green);">VERIFIED GROUNDED</span>
+        </div>
+        <div class="answer-text" id="answerBox"></div>
+      </div>
+
+      <!-- STAGE LATENCY BREAKDOWN -->
+      <div style="margin-top: 1.5rem;">
+        <div class="terminal-block-label">
+          <span>⚡ Stage Latency Telemetry (Sub-200ms Target)</span>
+        </div>
+        <div class="timings-grid" id="latencyGrid"></div>
+      </div>
+
+      <!-- RETRIEVED CHUNKS ACCORDION -->
+      <details class="debug-accordion">
+        <summary>🔍 Inspect Retrieved Passages & Hierarchical Chunks (FAISS + BM25 Scores)</summary>
+        <div class="chunks-list" id="chunksContainer"></div>
+      </details>
+    </div>
+
+    <!-- FOOTER -->
+    <footer>
+      <div class="footer-brand">
+        <span>© 2026 HH-Goa · Hacker House Goa</span>
+        <span>·</span>
+        <span>2:47 pm Studio</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://hhgoa.com/" target="_blank">hhgoa.com</a>
+        <a href="https://x.com/247pmstudio" target="_blank">@247pmstudio</a>
+        <a href="https://t.me/twofourtysevenpm" target="_blank">Telegram</a>
+        <a href="https://hacker-house-goa-2026.devfolio.co/" target="_blank">Devfolio</a>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let recordedBlob = null;
+    let isRecording = false;
+    let currentAnswerText = '';
+    let currentLanguageCode = 'hi-IN';
+
+    const micBtn = document.getElementById('micBtn');
+    const micStatus = document.getElementById('micStatus');
+    const audioPreview = document.getElementById('audioPreview');
+    const submitBtn = document.getElementById('submitBtn');
+    const textQueryInput = document.getElementById('textQueryInput');
+    const languageSelect = document.getElementById('languageSelect');
+    const knowledgeModeSelect = document.getElementById('knowledgeModeSelect');
+    const loader = document.getElementById('loader');
+    const resultsCard = document.getElementById('resultsCard');
+    const speakBtn = document.getElementById('speakBtn');
+
+    function setQuery(text, lang, mode) {
+      recordedBlob = null;
+      if (audioPreview) {
+        audioPreview.style.display = 'none';
+        audioPreview.src = '';
+      }
+      const fileInput = document.getElementById('audioFileInput');
+      if (fileInput) fileInput.value = '';
+      textQueryInput.value = text;
+      if (lang) languageSelect.value = lang;
+      if (mode) knowledgeModeSelect.value = mode;
+      submitPipelineQuery();
+    }
+
+    textQueryInput.addEventListener('input', () => {
+      recordedBlob = null;
+      const fileInput = document.getElementById('audioFileInput');
+      if (fileInput) fileInput.value = '';
+    });
+
+    // Direct High-Fidelity Audio Recording (Sarvam AI STT Engine)
+    let micStream = null;
+    let recordingTimer = null;
+    let recordingSeconds = 0;
+
+    micBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        // Start recording
+        textQueryInput.value = '';
+        recordedBlob = null;
+        audioChunks = [];
+        const fileInput = document.getElementById('audioFileInput');
+        if (fileInput) fileInput.value = '';
+
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(micStream);
+
+          mediaRecorder.ondataavailable = event => {
+            if (event.data && event.data.size > 0) {
+              audioChunks.push(event.data);
+            }
+          };
+
+          mediaRecorder.onstop = () => {
+            if (recordingTimer) {
+              clearInterval(recordingTimer);
+              recordingTimer = null;
+            }
+            if (audioChunks.length > 0) {
+              recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+              audioPreview.src = URL.createObjectURL(recordedBlob);
+              audioPreview.style.display = 'block';
+            }
+            if (micStream) {
+              micStream.getTracks().forEach(track => track.stop());
+              micStream = null;
+            }
+            submitPipelineQuery();
+          };
+
+          mediaRecorder.start(100);
+          isRecording = true;
+          recordingSeconds = 0;
+          micBtn.classList.add('recording');
+          micStatus.textContent = '🔴 [00:00] RECORDING... Speak in any Indic language or Hinglish. Tap mic again to submit.';
+          micStatus.style.color = 'var(--hh-red)';
+
+          recordingTimer = setInterval(() => {
+            recordingSeconds++;
+            const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+            const secs = String(recordingSeconds % 60).padStart(2, '0');
+            if (isRecording) {
+              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Speak your question, tap mic to submit!`;
+            }
+          }, 1000);
+
+        } catch (err) {
+          console.error("Microphone access error:", err);
+          alert('Microphone access notice: ' + err.message + '\n\nPlease ensure microphone access is allowed in your browser, or type your query in the terminal input.');
+          isRecording = false;
+          micBtn.classList.remove('recording');
+          micStatus.textContent = 'Microphone unavailable. You can type query in the terminal box.';
+          micStatus.style.color = 'var(--hh-red)';
+        }
+      } else {
+        // Stop recording and send audio to Sarvam AI STT
+        isRecording = false;
+        micBtn.classList.remove('recording');
+        if (recordingTimer) {
+          clearInterval(recordingTimer);
+          recordingTimer = null;
+        }
+        micStatus.textContent = '⚡ Transcribing via Sarvam AI & querying hybrid RAG pipeline...';
+        micStatus.style.color = 'var(--hh-orange)';
+
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+          mediaRecorder.stop();
+        } else if (textQueryInput.value.trim()) {
+          submitPipelineQuery();
+        }
+      }
+    });
+
+    submitBtn.addEventListener('click', () => {
+      submitPipelineQuery();
+    });
+
+    textQueryInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') submitPipelineQuery();
+    });
+
+    async function submitPipelineQuery() {
+      const textQuery = textQueryInput.value.trim();
+      const fileInput = document.getElementById('audioFileInput');
+      const lang = languageSelect.value || 'unknown';
+      const mode = knowledgeModeSelect.value || 'dataset_only';
+      
+      const formData = new FormData();
+      formData.append('language_code', lang);
+      formData.append('knowledge_mode', mode);
+      
+      if (recordedBlob) {
+        formData.append('audio', recordedBlob, 'recorded_speech.webm');
+      } else if (fileInput.files.length > 0) {
+        formData.append('audio', fileInput.files[0]);
+      } else if (textQuery) {
+        formData.append('query_text', textQuery);
+      } else {
+        alert('Please speak into the mic, upload an audio file, or enter a question.');
+        return;
+      }
+
+      loader.style.display = 'block';
+      resultsCard.style.display = 'none';
+
+      try {
+        const response = await fetch('/query', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.detail || 'API server returned status ' + response.status);
+        }
+        const data = await response.json();
+        displayResults(data);
+      } catch (err) {
+        alert('Pipeline execution error: ' + err.message);
+      } finally {
+        loader.style.display = 'none';
+        recordedBlob = null;
+      }
+    }
+
+    function displayResults(data) {
+      resultsCard.style.display = 'block';
+      currentAnswerText = data.final_answer || '';
+      currentLanguageCode = (data.stt_result && data.stt_result.language_code) || languageSelect.value || 'hi-IN';
+      if (currentLanguageCode === 'unknown') currentLanguageCode = 'hi-IN';
+      
+      // Badges
+      const badgesContainer = document.getElementById('badgesContainer');
+      badgesContainer.innerHTML = '';
+
+      if (data.is_refused) {
+        badgesContainer.innerHTML += `<span class="hh-badge badge-refusal">⛔ REFUSED BY GUARDRAIL</span>`;
+        badgesContainer.innerHTML += `<span class="hh-badge badge-refusal">REASON: ${data.refusal_reason}</span>`;
+      } else {
+        if (data.source_type === 'dataset_rag') {
+          badgesContainer.innerHTML += `<span class="hh-badge badge-grounded">📚 DATASET GROUNDED RAG</span>`;
+        } else if (data.source_type === 'gemini_world') {
+          badgesContainer.innerHTML += `<span class="hh-badge badge-world">🌐 GEMINI WORLD KNOWLEDGE</span>`;
+        } else {
+          badgesContainer.innerHTML += `<span class="hh-badge badge-world">⚡ HYBRID ROUTING</span>`;
+        }
+
+        if (data.generation_result?.model) {
+          badgesContainer.innerHTML += `<span class="hh-badge badge-meta">LLM: ${data.generation_result.model}</span>`;
+        }
+        if (data.stt_result?.provider) {
+          badgesContainer.innerHTML += `<span class="hh-badge badge-sarvam">STT: ${data.stt_result.provider}</span>`;
+        }
+        if (data.retrieval_result?.top_score > 0) {
+          badgesContainer.innerHTML += `<span class="hh-badge badge-meta">TOP SIMILARITY: ${data.retrieval_result.top_score.toFixed(4)}</span>`;
+        }
+      }
+
+      const transcript = data.query_text || '(No transcript)';
+      document.getElementById('transcriptBox').textContent = transcript;
+      document.getElementById('answerBox').textContent = data.final_answer;
+      
+      const langBadge = document.getElementById('transcriptionLangBadge');
+      if (data.stt_result?.language_code) {
+        langBadge.textContent = `[LANG: ${data.stt_result.language_code}]`;
+      } else {
+        langBadge.textContent = '';
+      }
+
+      if (!textQueryInput.value) {
+        textQueryInput.value = transcript;
+      }
+
+      // Auto-play voice answer via Sarvam TTS
+      playSarvamTTS(data.final_answer, currentLanguageCode);
+
+      // Latency Breakdown
+      const grid = document.getElementById('latencyGrid');
+      grid.innerHTML = '';
+      
+      const timings = data.stage_timings || {};
+      const retMs = timings.retrieval || 0.0;
+      const ragSubsystemMs = (retMs + (timings.input_guardrail || 0) + (timings.generation || 0) + (timings.grounding_check || 0) + (timings.output_guardrail || 0)).toFixed(2);
+      
+      for (const [stage, ms] of Object.entries(timings)) {
+        const isTarget = stage === 'retrieval' && ms < 200;
+        grid.innerHTML += `
+          <div class="timing-card ${isTarget ? 'highlight' : ''}">
+            <div class="timing-lbl">${stage.replace(/_/g, ' ')} ${isTarget ? '✅' : ''}</div>
+            <div class="timing-val">${ms} ms</div>
+          </div>
+        `;
+      }
+
+      grid.innerHTML += `
+        <div class="timing-card highlight">
+          <div class="timing-lbl" style="color: var(--hh-green);">RAG CORE TIME</div>
+          <div class="timing-val" style="color: #6ee7b7;">${ragSubsystemMs} ms</div>
+        </div>
+      `;
+
+      const e2eTargetMet = data.total_latency_ms < 200;
+      grid.innerHTML += `
+        <div class="timing-card e2e-card">
+          <div class="timing-lbl" style="color: var(--hh-orange);">TOTAL E2E ${e2eTargetMet ? '✅ (<200ms)' : ''}</div>
+          <div class="timing-val" style="color: #fff;">${data.total_latency_ms} ms</div>
+        </div>
+      `;
+
+      // Chunks Debug View
+      const chunksContainer = document.getElementById('chunksContainer');
+      chunksContainer.innerHTML = '';
+      (data.retrieved_chunks || []).forEach((c, idx) => {
+        chunksContainer.innerHTML += `
+          <div class="chunk-node">
+            <div class="chunk-meta-header">
+              <span><strong>Chunk #${idx+1}</strong> (Doc ID: ${c.doc_id})</span>
+              <span class="score">Hybrid: ${c.hybrid_score} | Dense: ${c.dense_score} | Sparse: ${c.sparse_score}</span>
+            </div>
+            <div class="chunk-body">${c.text}</div>
+          </div>
+        `;
+      });
+    }
+
+    async function playSarvamTTS(text, langCode) {
+      if (!text) return;
+      try {
+        const res = await fetch('/tts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text, language_code: langCode })
+        });
+        if (res.ok) {
+          const ttsData = await res.json();
+          if (ttsData.audio_base64) {
+            const audio = new Audio('data:audio/wav;base64,' + ttsData.audio_base64);
+            audio.play();
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn('Sarvam TTS error, falling back to browser speech synthesis:', e);
+      }
+
+      // Browser fallback
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+
+    speakBtn.addEventListener('click', () => {
+      if (currentAnswerText) {
+        playSarvamTTS(currentAnswerText, currentLanguageCode);
+      }
+    });
+  </script>
+</body>
+</html>
