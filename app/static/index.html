@@ -954,7 +954,7 @@
               <div class="bar"></div>
               <div class="bar"></div>
             </div>
-            <button id="micBtn" class="mic-main-btn" type="button" title="Click to Record Spoken Voice Query">
+            <button id="micBtn" class="mic-main-btn" type="button" onclick="toggleRecording()" title="Click to Record Spoken Voice Query">
               <span id="micBtnIcon">🎙️</span>
               <span id="micBtnText">START RECORDING</span>
             </button>
@@ -1112,7 +1112,7 @@
     let recordingSeconds = 0;
     let speechRecognizer = null;
 
-    micBtn.addEventListener('click', async () => {
+    window.toggleRecording = async function() {
       if (!isRecording) {
         // Start recording
         textQueryInput.value = '';
@@ -1249,7 +1249,9 @@
           submitPipelineQuery();
         }
       }
-    });
+    };
+
+    micBtn.addEventListener('click', window.toggleRecording);
 
     submitBtn.addEventListener('click', () => {
       submitPipelineQuery();
