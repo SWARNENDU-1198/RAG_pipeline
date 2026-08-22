@@ -142,17 +142,21 @@ class HybridRetriever:
             logger.error("Both dense and sparse retrieval returned empty results.")
             return []
 
+        def normalize_bm25(raw_score: float) -> float:
+            if raw_score <= 0.0:
+                return 0.0
+            return float(min(1.0, raw_score / (raw_score + 10.0)))
+
         if not dense_results:
             # Fallback to BM25 only
-            max_sp = max([s for _, s in sparse_results], default=1.0) or 1.0
             formatted = []
             for chunk, score in sparse_results[:top_k]:
                 c_copy = chunk.copy()
-                norm_sp = score / max_sp
+                norm_sp = normalize_bm25(score)
                 c_copy["dense_score"] = 0.0
-                c_copy["sparse_score"] = float(norm_sp)
-                c_copy["hybrid_score"] = float(norm_sp)
-                c_copy["score"] = float(norm_sp)
+                c_copy["sparse_score"] = round(norm_sp, 4)
+                c_copy["hybrid_score"] = round(norm_sp, 4)
+                c_copy["score"] = round(norm_sp, 4)
                 formatted.append(c_copy)
             return formatted
 
@@ -172,9 +176,6 @@ class HybridRetriever:
         chunk_map: Dict[str, Dict[str, Any]] = {}
         rrf_k = 60
 
-        # Max sparse score for normalization
-        max_sparse_score = max([s for _, s in sparse_results], default=1.0) or 1.0
-
         # Process dense results
         for rank, (chunk, d_score) in enumerate(dense_results):
             cid = chunk["chunk_id"]
@@ -192,7 +193,7 @@ class HybridRetriever:
         # Process sparse results
         for rank, (chunk, sp_score) in enumerate(sparse_results):
             cid = chunk["chunk_id"]
-            norm_sp = float(sp_score / max_sparse_score)
+            norm_sp = normalize_bm25(sp_score)
             if cid not in chunk_map:
                 c_copy = chunk.copy()
                 chunk_map[cid] = {
@@ -238,7 +239,7 @@ class HybridRetriever:
 
             # If sparse match exists, blend dense and sparse; otherwise preserve dense cross-lingual similarity
             if s_sc > 0:
-                linear_hybrid = max(d_sc, self.alpha * d_sc + (1.0 - self.alpha) * s_sc)
+                linear_hybrid = max(d_sc, s_sc, self.alpha * d_sc + (1.0 - self.alpha) * s_sc)
                 if same_script:
                     linear_hybrid = min(1.0, linear_hybrid + 0.10)
             else:
