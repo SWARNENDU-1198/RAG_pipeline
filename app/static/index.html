@@ -1073,6 +1073,11 @@
         const fileInput = document.getElementById('audioFileInput');
         if (fileInput) fileInput.value = '';
 
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert('Microphone access requires a secure origin (HTTPS).\n\nPlease ensure your site URL starts with https:// (e.g. on Render) or http://localhost.\n\nYou can also type your query directly into the terminal box.');
+          return;
+        }
+
         try {
           micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
           mediaRecorder = new MediaRecorder(micStream);
@@ -1149,10 +1154,14 @@
 
         } catch (err) {
           console.error("Microphone access error:", err);
-          alert('Microphone access notice: ' + err.message + '\n\nPlease ensure microphone access is allowed in your browser, or type your query in the terminal input.');
+          let errorMsg = 'Microphone access notice: ' + err.message;
+          if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+            errorMsg = 'Microphone permission is blocked in your browser.\n\n👉 How to fix:\n1. Click the Lock/Settings icon 🔒 on the left side of your browser address bar.\n2. Set "Microphone" to "Allow".\n3. Refresh the page and try again.';
+          }
+          alert(errorMsg);
           isRecording = false;
           micBtn.classList.remove('recording');
-          micStatus.textContent = 'Microphone unavailable. You can type query in the terminal box.';
+          micStatus.textContent = 'Microphone blocked. Allow microphone access in browser address bar (🔒 icon).';
           micStatus.style.color = 'var(--hh-red)';
         }
       } else {
