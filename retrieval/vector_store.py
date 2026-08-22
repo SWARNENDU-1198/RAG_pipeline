@@ -28,8 +28,8 @@ except ImportError:
 class FAISSVectorStore:
     """FAISS-based dense vector store with cosine similarity index and disk caching."""
 
-    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"):
-        self.model_name = model_name
+    def __init__(self, model_name: str = None):
+        self.model_name = model_name or os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
         self.model = None
         self.index = None
         self.chunks: List[Dict[str, Any]] = []
@@ -42,10 +42,15 @@ class FAISSVectorStore:
         if self.model is None:
             logger.info(f"Loading embedding model: {self.model_name}...")
             try:
+                import os
+                import gc
+                os.environ["TOKENIZERS_PARALLELISM"] = "false"
                 import torch
+                torch.set_grad_enabled(False)
                 torch.set_num_threads(1)
                 from sentence_transformers import SentenceTransformer
                 self.model = SentenceTransformer(self.model_name)
+                gc.collect()
             except Exception as e:
                 logger.warning(f"Could not load SentenceTransformer ({e}). Using lightweight TF-IDF embedder fallback.")
                 self.model = "fallback"
@@ -58,8 +63,17 @@ class FAISSVectorStore:
                 prefix = "query: " if is_query else "passage: "
                 formatted_texts = [prefix + t for t in texts]
             
-            embeddings = self.model.encode(formatted_texts, show_progress_bar=False, normalize_embeddings=True)
-            return np.array(embeddings, dtype=np.float32)
+            try:
+                embeddings = self.model.encode(
+                    formatted_texts,
+                    batch_size=16,
+                    show_progress_bar=False,
+                    normalize_embeddings=True
+                )
+                return np.array(embeddings, dtype=np.float32)
+            except Exception as e:
+                logger.warning(f"Encoding failed ({e}). Falling back to lightweight vectorizer.")
+                return self._fallback_encode(texts)
         else:
             return self._fallback_encode(texts)
 
