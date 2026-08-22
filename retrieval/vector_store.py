@@ -42,6 +42,8 @@ class FAISSVectorStore:
         if self.model is None:
             logger.info(f"Loading embedding model: {self.model_name}...")
             try:
+                import torch
+                torch.set_num_threads(1)
                 from sentence_transformers import SentenceTransformer
                 self.model = SentenceTransformer(self.model_name)
             except Exception as e:
