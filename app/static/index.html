@@ -370,43 +370,81 @@
 
     .mic-button-wrap {
       position: relative;
-      margin-bottom: 1.2rem;
+      margin-bottom: 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
     }
 
     .mic-main-btn {
-      width: 88px;
-      height: 88px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #181920 0%, #101117 100%);
-      border: 2px solid var(--card-border);
+      min-width: 180px;
+      padding: 0.9rem 1.75rem;
+      border-radius: 50px;
+      background: linear-gradient(135deg, #1f212d 0%, #12131a 100%);
+      border: 2px solid var(--hh-orange);
       color: #fff;
-      font-size: 2.2rem;
+      font-size: 1.1rem;
+      font-family: var(--font-mono);
+      font-weight: 700;
       cursor: pointer;
-      display: flex;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.3s ease;
+      gap: 0.6rem;
+      transition: all 0.25s ease;
       position: relative;
-      z-index: 2;
+      z-index: 10;
+      box-shadow: 0 0 20px rgba(255, 107, 53, 0.25);
     }
 
     .mic-main-btn:hover {
-      border-color: var(--hh-orange);
-      transform: scale(1.05);
-      box-shadow: 0 0 25px var(--hh-orange-glow);
+      border-color: #ff824e;
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 0 30px var(--hh-orange-glow);
     }
 
     .mic-main-btn.recording {
       border-color: var(--hh-red);
-      background: linear-gradient(135deg, #380812 0%, #1f0309 100%);
-      animation: mic-pulse 1.4s infinite;
-      box-shadow: 0 0 35px rgba(255, 51, 102, 0.5);
+      background: linear-gradient(135deg, #450a17 0%, #200308 100%);
+      animation: mic-pulse 1.3s infinite;
+      box-shadow: 0 0 35px rgba(255, 51, 102, 0.6);
+      color: #ff8099;
     }
 
     @keyframes mic-pulse {
       0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 51, 102, 0.6); }
-      70% { transform: scale(1.08); box-shadow: 0 0 0 16px rgba(255, 51, 102, 0); }
+      70% { transform: scale(1.03); box-shadow: 0 0 0 14px rgba(255, 51, 102, 0); }
       100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 51, 102, 0); }
+    }
+
+    .audio-visualizer {
+      display: none;
+      align-items: center;
+      gap: 4px;
+      height: 24px;
+      margin-bottom: 0.5rem;
+    }
+
+    .audio-visualizer.active {
+      display: flex;
+    }
+
+    .audio-visualizer .bar {
+      width: 4px;
+      height: 100%;
+      background: var(--hh-orange);
+      border-radius: 2px;
+      animation: wave-bar 1s ease-in-out infinite alternate;
+    }
+    .audio-visualizer .bar:nth-child(2) { animation-delay: 0.15s; height: 70%; background: var(--hh-amber); }
+    .audio-visualizer .bar:nth-child(3) { animation-delay: 0.3s; height: 100%; background: var(--hh-red); }
+    .audio-visualizer .bar:nth-child(4) { animation-delay: 0.45s; height: 60%; background: var(--hh-yellow); }
+    .audio-visualizer .bar:nth-child(5) { animation-delay: 0.2s; height: 85%; background: var(--hh-orange); }
+
+    @keyframes wave-bar {
+      0% { transform: scaleY(0.3); }
+      100% { transform: scaleY(1.0); }
     }
 
     .mic-status-label {
@@ -414,7 +452,7 @@
       font-size: 0.8rem;
       color: var(--text-muted);
       line-height: 1.4;
-      max-width: 280px;
+      max-width: 320px;
     }
 
     .audio-player-preview {
@@ -909,7 +947,17 @@
         <!-- MIC BOX -->
         <div class="voice-studio-box">
           <div class="mic-button-wrap">
-            <button id="micBtn" class="mic-main-btn" title="Click to Speak in Any Indic Language">🎙️</button>
+            <div id="audioVisualizer" class="audio-visualizer">
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+              <div class="bar"></div>
+            </div>
+            <button id="micBtn" class="mic-main-btn" type="button" title="Click to Record Spoken Voice Query">
+              <span id="micBtnIcon">🎙️</span>
+              <span id="micBtnText">START RECORDING</span>
+            </button>
           </div>
           <div id="micStatus" class="mic-status-label">Tap microphone to speak question in any Indian language or Hinglish</div>
           <audio id="audioPreview" class="audio-player-preview" controls></audio>
@@ -1140,7 +1188,14 @@
           isRecording = true;
           recordingSeconds = 0;
           micBtn.classList.add('recording');
-          micStatus.textContent = '🔴 [00:00] RECORDING... Speak your question in any Indian language. Tap mic to finish.';
+          const iconEl = document.getElementById('micBtnIcon');
+          const textEl = document.getElementById('micBtnText');
+          const vizEl = document.getElementById('audioVisualizer');
+          if (iconEl) iconEl.textContent = '⏹️';
+          if (textEl) textEl.textContent = 'STOP & SUBMIT';
+          if (vizEl) vizEl.classList.add('active');
+
+          micStatus.textContent = '🔴 [00:00] RECORDING... Speak your question in any Indian language. Tap to finish.';
           micStatus.style.color = 'var(--hh-red)';
 
           recordingTimer = setInterval(() => {
@@ -1148,7 +1203,7 @@
             const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
             const secs = String(recordingSeconds % 60).padStart(2, '0');
             if (isRecording && !textQueryInput.value.trim()) {
-              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Speak now, tap mic when finished.`;
+              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Speak now, tap button when done.`;
             }
           }, 1000);
 
@@ -1161,6 +1216,12 @@
           alert(errorMsg);
           isRecording = false;
           micBtn.classList.remove('recording');
+          const iconEl = document.getElementById('micBtnIcon');
+          const textEl = document.getElementById('micBtnText');
+          const vizEl = document.getElementById('audioVisualizer');
+          if (iconEl) iconEl.textContent = '🎙️';
+          if (textEl) textEl.textContent = 'START RECORDING';
+          if (vizEl) vizEl.classList.remove('active');
           micStatus.textContent = 'Microphone blocked. Allow microphone access in browser address bar (🔒 icon).';
           micStatus.style.color = 'var(--hh-red)';
         }
@@ -1168,6 +1229,13 @@
         // Stop recording
         isRecording = false;
         micBtn.classList.remove('recording');
+        const iconEl = document.getElementById('micBtnIcon');
+        const textEl = document.getElementById('micBtnText');
+        const vizEl = document.getElementById('audioVisualizer');
+        if (iconEl) iconEl.textContent = '⚡';
+        if (textEl) textEl.textContent = 'TRANSCRIBING...';
+        if (vizEl) vizEl.classList.remove('active');
+
         if (recordingTimer) {
           clearInterval(recordingTimer);
           recordingTimer = null;
@@ -1237,6 +1305,16 @@
       } finally {
         loader.style.display = 'none';
         recordedBlob = null;
+        const iconEl = document.getElementById('micBtnIcon');
+        const textEl = document.getElementById('micBtnText');
+        const vizEl = document.getElementById('audioVisualizer');
+        if (iconEl) iconEl.textContent = '🎙️';
+        if (textEl) textEl.textContent = 'START RECORDING';
+        if (vizEl) vizEl.classList.remove('active');
+        if (!isRecording) {
+          micStatus.textContent = 'Tap microphone to speak question in any Indian language or Hinglish';
+          micStatus.style.color = 'var(--text-muted)';
+        }
       }
     }
 
