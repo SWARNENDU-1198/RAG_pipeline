@@ -1126,6 +1126,9 @@
       return new Blob([view], { type: 'audio/wav' });
     }
 
+    let mediaRecorderBackup = null;
+    let mediaRecorderChunks = [];
+
     micBtn.addEventListener('click', async () => {
       if (!isRecording) {
         // Start recording
@@ -1133,23 +1136,26 @@
         recordedBlob = null;
         pcmBuffers = [];
         pcmLength = 0;
+        mediaRecorderChunks = [];
         const fileInput = document.getElementById('audioFileInput');
         if (fileInput) fileInput.value = '';
 
         try {
-          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-          audioCtx = new AudioContextClass();
           micStream = await navigator.mediaDevices.getUserMedia({
             audio: {
               channelCount: 1,
-              sampleRate: 16000,
               echoCancellation: true,
               noiseSuppression: true
             }
           });
 
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+          if (audioCtx.state === 'suspended') {
+            await audioCtx.resume();
+          }
+
           micSource = audioCtx.createMediaStreamSource(micStream);
-          // Buffer size 4096, 1 input channel, 1 output channel
           scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
 
           scriptProcessor.onaudioprocess = (e) => {
@@ -1162,6 +1168,15 @@
           micSource.connect(scriptProcessor);
           scriptProcessor.connect(audioCtx.destination);
 
+          // Backup MediaRecorder stream
+          try {
+            mediaRecorderBackup = new MediaRecorder(micStream);
+            mediaRecorderBackup.ondataavailable = e => {
+              if (e.data && e.data.size > 0) mediaRecorderChunks.push(e.data);
+            };
+            mediaRecorderBackup.start(100);
+          } catch(e) {}
+
           // Client-side real-time speech recognition assist
           const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
           if (SpeechRec) {
@@ -1169,7 +1184,7 @@
             speechRecognizer.continuous = true;
             speechRecognizer.interimResults = true;
             const selectedLang = languageSelect.value;
-            speechRecognizer.lang = (selectedLang && selectedLang !== 'unknown') ? selectedLang : 'hi-IN';
+            speechRecognizer.lang = (selectedLang && selectedLang !== 'unknown') ? selectedLang : 'en-IN';
             speechRecognizer.onresult = (event) => {
               let liveTranscript = '';
               for (let i = 0; i < event.results.length; ++i) {
@@ -1177,6 +1192,7 @@
               }
               if (liveTranscript.trim()) {
                 textQueryInput.value = liveTranscript.trim();
+                micStatus.textContent = `🎙️ Heard: "${liveTranscript.trim()}" (Tap mic to submit)`;
               }
             };
             try { speechRecognizer.start(); } catch (e) {}
@@ -1185,15 +1201,15 @@
           isRecording = true;
           recordingSeconds = 0;
           micBtn.classList.add('recording');
-          micStatus.textContent = '🔴 [00:00] RECORDING... Speak your question in any Indian language. Tap mic to finish.';
+          micStatus.textContent = '🔴 [00:00] RECORDING... Speak your question in any Indian language. Tap mic when done.';
           micStatus.style.color = 'var(--hh-red)';
 
           recordingTimer = setInterval(() => {
             recordingSeconds++;
             const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
             const secs = String(recordingSeconds % 60).padStart(2, '0');
-            if (isRecording) {
-              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Tap mic button when done.`;
+            if (isRecording && !textQueryInput.value.trim()) {
+              micStatus.textContent = `🔴 [${mins}:${secs}] RECORDING... Speak now, tap mic when finished.`;
             }
           }, 1000);
 
@@ -1221,18 +1237,25 @@
         micStatus.style.color = 'var(--hh-orange)';
 
         try {
+          if (mediaRecorderBackup && mediaRecorderBackup.state === 'recording') {
+            mediaRecorderBackup.stop();
+          }
           if (scriptProcessor && micSource) {
             micSource.disconnect();
             scriptProcessor.disconnect();
           }
-          if (micStream) {
-            micStream.getTracks().forEach(track => track.stop());
-            micStream = null;
-          }
-          if (pcmBuffers.length > 0 && audioCtx) {
+          if (pcmBuffers.length > 0 && pcmLength > 1000 && audioCtx) {
             recordedBlob = export16kHzWAV(pcmBuffers, pcmLength, audioCtx.sampleRate);
             audioPreview.src = URL.createObjectURL(recordedBlob);
             audioPreview.style.display = 'block';
+          } else if (mediaRecorderChunks.length > 0) {
+            recordedBlob = new Blob(mediaRecorderChunks, { type: 'audio/webm' });
+            audioPreview.src = URL.createObjectURL(recordedBlob);
+            audioPreview.style.display = 'block';
+          }
+          if (micStream) {
+            micStream.getTracks().forEach(track => track.stop());
+            micStream = null;
           }
           if (audioCtx) {
             audioCtx.close();

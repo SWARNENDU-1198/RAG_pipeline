@@ -406,16 +406,18 @@ _global_gemini_client = None
 
 def get_llm_client() -> BaseLLMClient:
     global _global_gemini_client
-    provider = os.getenv("LLM_PROVIDER", "mock").lower()
+    provider = os.getenv("LLM_PROVIDER", "gemini").lower()
     gemini_key = os.getenv("GEMINI_API_KEY", "")
     openai_key = os.getenv("OPENAI_API_KEY", "")
 
-    if provider in ["mock", "local", "dataset", "dataset_only"]:
-        return MockLLMClient()
-    if (provider == "gemini" or not provider) and gemini_key:
+    if gemini_key and provider in ["gemini", "auto", "google", ""]:
         if _global_gemini_client is None:
             _global_gemini_client = GeminiClient()
         return _global_gemini_client
-    elif provider == "openai" and openai_key:
+    elif openai_key and provider == "openai":
         return OpenAIClient()
+    elif gemini_key:
+        if _global_gemini_client is None:
+            _global_gemini_client = GeminiClient()
+        return _global_gemini_client
     return MockLLMClient()
